@@ -29,22 +29,31 @@ namespace MagmaCFB
         private const int n = 8;
         private const int s = 8;
         private const int m = 2 * n;
-        public static string CFBEncrypt(byte[] gamma, byte[] message, byte[] key)
+        public static byte[] CFBEncrypt(byte[] IV, byte[] message, byte[] key)
 
         {
-            /*Получается гамма на вход = 32 бита. Входной блок это видимо первый кусок гаммы (gammaMSB).*/
-
-
-            //int blocksCount = message.Length % 64 == 0 ? message.Length / 64 : message.Length / 64 + 1;
-
-            //int blocksCount = message.Length % 16 == 0 ? message.Length / 16 : message.Length / 16 + 1;
-            int blocksCount = message.Length % 16 == 0 ? message.Length / 16 : message.Length / 16 + 1;
+            int blocksCount = message.Length % 8 == 0 ? message.Length / 8 : message.Length / 8 + 1;
             int blockSize = 16;
+
+            byte[] gammaMSB = new byte[n];
+            byte[] gammaLSB = new byte[m-s];
+            byte[] R = IV;
+            byte[] Ci = new byte[s];
+            byte[] C = new byte[Ci.Length * blocksCount];
+
             //byte[] resultCiphertext = new byte[blockSize];
             string resultCiphertext = "";
 
             for (int i = 1; i < blocksCount + 1; i++)
             {
+
+                if (i != 1)
+                {
+                    R = gammaLSB.Concat(Ci).ToArray();
+                    //R = new byte[IV.Length]; gamma[(blockSize * (i - 1))..(blockSize * i)].CopyTo(gammaBlock, 0);
+                }
+                    
+
                 //byte[] messageBlock = message[0..(16 * i)];
                 //byte[] gammaBlock = gamma[0..(16 * i)];
 
@@ -54,76 +63,64 @@ namespace MagmaCFB
                 // ОШИБКА где-то тут
                 //byte[] messageBlock = message[(blockSize*(i - 1))..(blockSize * i)]; - БЫЛО
                 byte[] messageBlock = message[(n * (i - 1))..(n * i)];
-                byte[] gammaBlock = gamma[(blockSize * (i - 1))..(blockSize * i)];
+
+                //byte[] gammaBlock = new byte[m];
+
+                //if (i == 1)
+                //    gamma[(blockSize * (i - 1))..(blockSize * i)].CopyTo(gammaBlock, 0);
+               // else
+
 
                 //for (int b = 0; b < gammaBlock.Length / 2; b++)
                 //{
                 //    Console.Write(gammaBlock[b].ToString());
                 //}
 
-                Console.WriteLine($"Pi:{messageBlock.NewToHexString()}");
+                Console.WriteLine($"P{i}: {messageBlock.NewToHexString()}");
 
-                //Console.WriteLine($"Входной блок:{gammaBlock.NewToHexString()}");
                 //Console.WriteLine($"GammaBlock:{gammaBlock.NewToHexString()}");
+
                 // 2) LSB - берем последние registerLength символов от гаммы
-                //byte[] gammaLSB = gammaBlock[^registerLength..gamma.Length];
-
-                //byte[] gammaLSB = gammaBlock[((m - s)/2)..gammaBlock.Length];
-                byte[] gammaLSB = gammaBlock[(m - s)..gammaBlock.Length];
-
-                //byte[] gammaLSB = gammaBlock[^((m - s)/2)..gamma.Length];
-                Console.WriteLine($"GammaLSB:{gammaLSB.NewToHexString()}");
+                //byte[] gammaLSB = gammaBlock[(m - s)..gammaBlock.Length]; !!!!!!!!!!!!!!!!!!!!!!!!!!!1
+                R[(m - s)..R.Length].CopyTo(gammaLSB, 0); // Меняем gammaLSB, тк теперь гамма другая
+                Console.WriteLine($"GammaLSB: {gammaLSB.NewToHexString()}");
 
                 // 3) MSB - берем первые n символов от гаммы
-                byte[] gammaMSB = gammaBlock[0..n];
+                //byte[] gammaMSB = gammaBlock[0..n];
+                R[0..n].CopyTo(gammaMSB, 0); // Меняем gammaMSB, тк теперь гамма другая
                 //Console.WriteLine($"GammaMSB:{gammaMSB.NewToHexString()}");
-                Console.WriteLine($"Входной блок:{gammaMSB.NewToHexString()}");
-
-                // Вызываем метод базового алгоритма Магма
-                // БЫЛО
-                //var encryptRes = MyEncrypt(gammaMSB.ToHexString(), key); // Пока что подаём string, потом наверное сразу в байтах сделаю
-
-                //byte[] encryptRes = MyEncrypt(gammaMSB.ToHexString(), key).ToByteArray();
-
-                //byte[] encryptRes = Convert.FromHexString(MyEncrypt(gammaMSB.ToHexString(), key));
-                //byte[] encryptRes = Convert.FromHexString(Encrypt(gammaMSB.ToHexString(), key));
-
-
-                //string encryptRes = Encrypt(gammaMSB.NewToHexString(), key);
-
-                Console.WriteLine(key.Length);
+                Console.WriteLine($"Входной блок: {gammaMSB.NewToHexString()}");
 
                 string encryptRes = MyEncrypt(gammaMSB.NewToHexString(), key);
-
                 Console.WriteLine("Выходной блок: " + encryptRes);
-                /*
-                byte[] encryptRes = new byte[100];
-                Console.WriteLine($"Результат шифрования:{encryptRes.NewToHexString}");
+
                 // 4) Усекаем выход функции Encrypt
-                byte[] usechenniyRes = encryptRes;
+                byte[] usechenniyRes = Convert.FromHexString(encryptRes);
                 
 
-                if (encryptRes.Length % 64 != 0)
-                    usechenniyRes = encryptRes[0..s];
+                if (encryptRes.Length % s != 0)
+                    usechenniyRes = Convert.FromHexString(encryptRes[0..s]);
 
-                Console.WriteLine($"Усеченный результат шифрования:{usechenniyRes.NewToHexString}");
+                Console.WriteLine($"Усеченный результат шифрования: {usechenniyRes.NewToHexString()}");
 
                 // 5) XOR усеченного результата и открытого текста
-                byte[] ciphertextblock = new byte[usechenniyRes.Length];
+                //byte[] ciphertextblock = new byte[usechenniyRes.Length];
 
                 for (int j = 0; j < usechenniyRes.Length; j++)
-                    ciphertextblock[j] = (byte)(usechenniyRes[j] ^ messageBlock[j]);
+                    Ci[j] = (byte)(usechenniyRes[j] ^ messageBlock[j]);
 
-                resultCiphertext += gammaLSB.NewToHexString() + ciphertextblock.NewToHexString();
+                //resultCiphertext += gammaLSB.NewToHexString() + ciphertextblock.NewToHexString();
 
-                Console.WriteLine($"Кусок итогового шифртекста{i}" + $"итерация:{resultCiphertext}");
-                */
+                Console.WriteLine($"Кусок итогового шифртекста {i}" + $" итерация: {Ci.NewToHexString()}");
+
+                Ci.CopyTo(C, Ci.Length * (i-1));
                 // Вызываем эту функцию снова
             }
 
             //Console.WriteLine($"Итоговый шифртекст: {resultCiphertext}");
 
-            return resultCiphertext;
+            //return resultCiphertext;
+            return C;
         }
 
         /// <summary>

@@ -71,10 +71,12 @@ namespace MagmaCFB
 
             //string encryptMessage = Magma.CFBEncrypt(byte_IV, hex_message, byte_key, registerLength);
             //string encryptMessage = Magma.CFBEncrypt(byte_IV, byte_CFB_message, byte_key, registerLength);
-            string encryptMessage = Magma.CFBEncrypt(byte_IV, byte_CFB_message, byte_key);
 
+            //string encryptMessage = Magma.CFBEncrypt(byte_IV, byte_CFB_message, byte_key);
+            //Console.WriteLine($"Зашифрованное сообщение:\n{encryptMessage}");
 
-            Console.WriteLine($"Зашифрованное сообщение:\n{encryptMessage}");
+            byte[] encryptMessage = Magma.CFBEncrypt(byte_IV, byte_CFB_message, byte_key);
+            Console.WriteLine($"Зашифрованное сообщение:\n{encryptMessage.NewToHexString()}");
 
         }
     }
