@@ -10,7 +10,7 @@ namespace MagmaCFB
     /// 
     static class Magma
     {
-        // pi-подстановка
+        // Таблица замены (еще называют pi-подстановкой)
         private static readonly byte[][] pi = new byte[8][]
         {
             new byte[16] {12, 4, 6, 2, 10, 5, 11, 9, 14, 8, 13, 7, 0, 3, 15, 1},
@@ -108,12 +108,11 @@ namespace MagmaCFB
             byte[] messageBytes = message.ToByteArray();
             byte[][] K = GetIterationKeys(key);
 
-            Console.WriteLine("Итерационные ключи: \n");
-            foreach (var row in K)
-                Console.WriteLine(Convert.ToHexString(row).ToLower());
-                //Console.WriteLine(string.Join(", ", row));
+            //Console.WriteLine("Итерационные ключи: \n");
+            //foreach (var row in K)
+              //  Console.WriteLine(Convert.ToHexString(row).ToLower());
 
-            byte[] encryptBytes = TransE(messageBytes, K);
+            byte[] encryptBytes = E(messageBytes, K);
             //byte[] encryptBytes = TransE(message, K);
 
             encryptMessage += encryptBytes.ToHexString();
@@ -133,7 +132,6 @@ namespace MagmaCFB
             for (int i = 0; i < 8; i++)
             {
                 K[i] = key.Skip(28 - 4 * i).Take(4).ToArray();
-                Console.WriteLine($"Ki = {K[i].NewToHexString()}");
                 K[i + 8] = K[i];
                 K[i + 16] = K[i];
             }
@@ -175,7 +173,7 @@ namespace MagmaCFB
         /// <param name="message"> Блок открытого текста </param>
         /// <param name="K"> Зубчатый массив итерационных ключей </param>
         /// <returns> На выходе совокупность измененной левой и правой части </returns>
-        private static byte[] TransE(byte[] message, byte[][] K)
+        private static byte[] E(byte[] message, byte[][] K)
         {
             // Числа а1 и а0 будем называть двоичными векторами
             byte[] a1 = message.Skip(4).ToArray(); // Первые 4 байта сообщения (изначально левая часть)
@@ -183,7 +181,7 @@ namespace MagmaCFB
 
             // Выполняем раундовые преобразования 32 раза
             for (int i = 0; i < 32; i++)
-                TransG(K[i], ref a1, ref a0);
+                G(K[i], ref a1, ref a0);
 
             return a1.Concat(a0).ToArray();
         }
@@ -195,13 +193,13 @@ namespace MagmaCFB
         /// <param name="K"> Итерационный ключ </param>
         /// <param name="a1"> 32-битная часть сообщения (левая или правая, зависит от раунда) </param>
         /// <param name="a0"> 32-битная часть сообщения (левая или правая, зависит от раунда) </param>
-        private static void TransG(byte[] K, ref byte[] a1, ref byte[] a0)
+        private static void G(byte[] K, ref byte[] a1, ref byte[] a0)
         {
             // Меняю части местами
             byte[] part = a1;
             a1 = a0;
             // Преобразую одну часть
-            a0 = TransX(TransSmallG(K, a0), part);
+            a0 = XOR(TransSmallG(K, a0), part);
         }
 
         //                                                      3
@@ -209,7 +207,7 @@ namespace MagmaCFB
         /// Выполняет g-преобразование
         /// </summary>
         /// <param name="K">Итерационный ключ</param>
-        /// <param name="a">32-битная часть сообщениея</param>
+        /// <param name="a">32-битная часть сообщения</param>
         /// 
         private static byte[] TransSmallG(byte[] K, byte[] a)
         {
@@ -218,14 +216,14 @@ namespace MagmaCFB
             // Разбиваем результат сложения на массив из 4-битовых векторов (удобно для замен)
             byte[] fourBitsArray = sum.ToFourBitsArray();
 
-            // t-преобразование, выполняющее pi-подстановку
+            // t-преобразование, выполняющее замену
+            // Бит из вектора заменяется на бит из таблицы замены
+            // (предыдущее значение бита выступает номером числа, на который он будет заменен)
             for (int i = 0; i < 8; i++)
-            {
                 fourBitsArray[i] = pi[i][fourBitsArray[i]];
-            }
 
-            byte[] normalBytes = fourBitsArray.ToByteArray();
-            byte[] res = CyclicShift11(normalBytes);
+            byte[] normalBytes = fourBitsArray.ToByteArray(); // ПЕРЕВОРАЧИВАЕМ ОБРАТНО
+            byte[] res = LeftShift11(normalBytes); // Сдвигаем байты на 11 влево
             return res;
         }
 
@@ -239,7 +237,7 @@ namespace MagmaCFB
         {
             return (new BigInteger(a) + new BigInteger(b) % BigInteger.Pow(2, 32)).ToByteArray();
 
-            // БЫЛО
+            // Если вдруг придется дополнять длину (по факту такого ни разу не было, поэтому закомментил)
             //byte[] tmp = (new BigInteger(a) + new BigInteger(b) % BigInteger.Pow(2, 32)).ToByteArray();
             //if (tmp.Length < 4)
             //{
@@ -248,16 +246,6 @@ namespace MagmaCFB
             //byte[] res = new byte[4];
             //Array.Copy(tmp, 0, res, 0, 4);
             //return res;
-
-
-            // Вариант из С++ (не доделан)
-            //  byte[] summa = new byte[4];
-            //  int kusok = 0;
-            //for (int i = 3; i >= 0; i--)
-            //{
-            //  kusok = a[i] + b[i] + (kusok >> 8);
-            //  byte[] arr = kusok & 255;
-            //}
         }
         //                                                       5
         /// <summary>
@@ -265,7 +253,7 @@ namespace MagmaCFB
         /// </summary>
         /// <param name="arr"></param>
         /// <returns></returns>
-        private static byte[] CyclicShift11(byte[] arr)
+        private static byte[] LeftShift11(byte[] arr)
         {
             string bitsString = "";
             for (int i = 0; i < 4; i++) // байты в двоичные строки
@@ -301,15 +289,14 @@ namespace MagmaCFB
 
         //                                                      6
         /// <summary>
-        /// Выполняет X-преобразование(xor)
+        /// Выполняет xor двух массивов байт
         /// </summary>
-        private static byte[] TransX(byte[] k, byte[] a)
+        private static byte[] XOR(byte[] k, byte[] a)
         {
             byte[] result = new byte[4];
             for (int i = 0; i < 4; i++)
-            {
                 result[i] = (byte)(k[i] ^ a[i]);
-            }
+
             return result;
         }
     }
