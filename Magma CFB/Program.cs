@@ -15,7 +15,7 @@ namespace MagmaCFB
             string openTextForCFB = "92def06b3c130a59db54c704f8189d204a98fb2e67a8024c8912409b17b57e41";
 
             byte[] byte_CFB_message = Convert.FromHexString(openTextForCFB);
-            byte[] byte_key = key.ToByteArray();
+            byte[] byte_key = key.ToByteArray(); // КЛЮЧ В ПЕРЕВЕРНУТОМ ВИДЕ!!!
             byte[] byte_IV = Convert.FromHexString(IV);
 
             Console.WriteLine($"Ключ шифрования:\n{byte_key.ToHexString()}");

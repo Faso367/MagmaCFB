@@ -27,7 +27,6 @@ namespace MagmaCFB
         private const int s = 8;
         private const int m = 2 * n;
 
-
         /// <summary>
         /// Метод реализует ГОСТ 34.13-2015, режим гаммирования
         /// с обратной связью по шифртексту (алгоритм Магма)
@@ -108,6 +107,12 @@ namespace MagmaCFB
 
             byte[] messageBytes = message.ToByteArray();
             byte[][] K = GetIterationKeys(key);
+
+            Console.WriteLine("Итерационные ключи: \n");
+            foreach (var row in K)
+                Console.WriteLine(Convert.ToHexString(row).ToLower());
+                //Console.WriteLine(string.Join(", ", row));
+
             byte[] encryptBytes = TransE(messageBytes, K);
             //byte[] encryptBytes = TransE(message, K);
 
@@ -128,81 +133,133 @@ namespace MagmaCFB
             for (int i = 0; i < 8; i++)
             {
                 K[i] = key.Skip(28 - 4 * i).Take(4).ToArray();
+                Console.WriteLine($"Ki = {K[i].NewToHexString()}");
                 K[i + 8] = K[i];
                 K[i + 16] = K[i];
             }
+
+            // Ключи в правильном порядке, но каждый итерационный ключ в перевернутом виде.
+
+            //K[0] = последние 4 бита ключа
+
+            //Копирую 4 бита
+            //K[8] = K[0];
+            //K[16] = K[0];
+
+            //K[1] = 4 бита влево
+            //K[9] = K[1];
+            //K[17] = K[2];
+
+
+
+            // Последние 8 ключей в обратном порядке
             for (int i = 0; i < 8; i++)
             {
                 K[i + 24] = K[7 - i];
             }
+
+            //K[24] = K[7];
+            //K[25] = K[6];
+
             return K;
         }
 
+        //                                   -----  Алгоритм зашифрования Магма -----
+
+
+        //                                                     1
         /// <summary>
-        /// Выполняет E-подстановку E = G*[K32]G[K31]...G[K1]
+        /// Делит входной блок сообщения на 2 части и запускает 32 раунда
+        /// (то есть выполняет E-подстановку E = G*[K32]G[K31]...G[K1])
         /// </summary>
-        /// <param name="message">Зашифрованное сообщение</param>
-        /// <param name="K">Последовательность итерационных ключей</param>
+        /// <param name="message"> Блок открытого текста </param>
+        /// <param name="K"> Зубчатый массив итерационных ключей </param>
+        /// <returns> На выходе совокупность измененной левой и правой части </returns>
         private static byte[] TransE(byte[] message, byte[][] K)
         {
-            byte[] a1 = message.Skip(4).ToArray();
-            byte[] a0 = message.Take(4).ToArray();
+            // Числа а1 и а0 будем называть двоичными векторами
+            byte[] a1 = message.Skip(4).ToArray(); // Первые 4 байта сообщения (изначально левая часть)
+            byte[] a0 = message.Take(4).ToArray(); // Последние 4 байта (изначально правая часть)
 
+            // Выполняем раундовые преобразования 32 раза
             for (int i = 0; i < 32; i++)
-            {
                 TransG(K[i], ref a1, ref a0);
-            }
+
             return a1.Concat(a0).ToArray();
         }
 
+        //                                                      2
         /// <summary>
-        /// Выполняет D-подстановку D = G*[K1]G[K2]...G[K32]
+        /// Выполняет 1 полный раунд (G-преобразование)
         /// </summary>
-        /// <param name="message">Зашифрованное сообщение</param>
-        /// <param name="K">Последовательность итерационных ключей</param>
-        private static byte[] TransD(byte[] message, byte[][] K)
-        {
-            byte[] a1 = message.Skip(4).ToArray();
-            byte[] a0 = message.Take(4).ToArray();
-
-            for (int i = 31; i >= 0; i--)
-            {
-                TransG(K[i], ref a1, ref a0);
-            }
-            return a1.Concat(a0).ToArray();
-        }
-
-        /// <summary>
-        /// Выполняет G-преобразование
-        /// </summary>
-        /// <param name="K">Итерационный ключ</param>
-        /// <param name="a1">32-битная часть сообщениея</param>
-        /// <param name="a0">32-битная часть сообщениея</param>
+        /// <param name="K"> Итерационный ключ </param>
+        /// <param name="a1"> 32-битная часть сообщения (левая или правая, зависит от раунда) </param>
+        /// <param name="a0"> 32-битная часть сообщения (левая или правая, зависит от раунда) </param>
         private static void TransG(byte[] K, ref byte[] a1, ref byte[] a0)
         {
-            byte[] tmp = a1;
+            // Меняю части местами
+            byte[] part = a1;
             a1 = a0;
-            a0 = TransX(TransSmallG(K, a0), tmp);
+            // Преобразую одну часть
+            a0 = TransX(TransSmallG(K, a0), part);
         }
 
+        //                                                      3
         /// <summary>
         /// Выполняет g-преобразование
         /// </summary>
         /// <param name="K">Итерационный ключ</param>
         /// <param name="a">32-битная часть сообщениея</param>
+        /// 
         private static byte[] TransSmallG(byte[] K, byte[] a)
         {
             byte[] sum = AddMod32(K, a);
+
+            // Разбиваем результат сложения на массив из 4-битовых векторов (удобно для замен)
             byte[] fourBitsArray = sum.ToFourBitsArray();
-            for (int i = 0; i < 8; i++) // t-преобразование, выполняющее pi-подстановку
+
+            // t-преобразование, выполняющее pi-подстановку
+            for (int i = 0; i < 8; i++)
             {
                 fourBitsArray[i] = pi[i][fourBitsArray[i]];
             }
+
             byte[] normalBytes = fourBitsArray.ToByteArray();
             byte[] res = CyclicShift11(normalBytes);
             return res;
         }
 
+        //                                                        4
+        /// <summary>
+        /// Сложение в кольце 2^32 (значит по модулю 32)
+        /// </summary>
+        /// <param name="a">Первое число</param>
+        /// <param name="b">Второе число</param>
+        private static byte[] AddMod32(byte[] a, byte[] b)
+        {
+            return (new BigInteger(a) + new BigInteger(b) % BigInteger.Pow(2, 32)).ToByteArray();
+
+            // БЫЛО
+            //byte[] tmp = (new BigInteger(a) + new BigInteger(b) % BigInteger.Pow(2, 32)).ToByteArray();
+            //if (tmp.Length < 4)
+            //{
+            //    tmp = tmp.Concat(new byte[1]).ToArray();
+            //}
+            //byte[] res = new byte[4];
+            //Array.Copy(tmp, 0, res, 0, 4);
+            //return res;
+
+
+            // Вариант из С++ (не доделан)
+            //  byte[] summa = new byte[4];
+            //  int kusok = 0;
+            //for (int i = 3; i >= 0; i--)
+            //{
+            //  kusok = a[i] + b[i] + (kusok >> 8);
+            //  byte[] arr = kusok & 255;
+            //}
+        }
+        //                                                       5
         /// <summary>
         /// Выполняет циклический сдвиг последовательности на 11 бит влево
         /// </summary>
@@ -242,6 +299,7 @@ namespace MagmaCFB
             return res;
         }
 
+        //                                                      6
         /// <summary>
         /// Выполняет X-преобразование(xor)
         /// </summary>
@@ -254,45 +312,9 @@ namespace MagmaCFB
             }
             return result;
         }
-
-        /// <summary>
-        /// Сложение в кольце 2^32
-        /// </summary>
-        /// <param name="a">Первое число</param>
-        /// <param name="b">Второе число</param>
-        private static byte[] AddMod32(byte[] a, byte[] b)
-        {
-            var x = new BigInteger(a);
-            var y = new BigInteger(b);
-            byte[] tmp = (new BigInteger(a) + new BigInteger(b) % BigInteger.Pow(2, 32)).ToByteArray();
-            if (tmp.Length < 4)
-            {
-                tmp = tmp.Concat(new byte[1]).ToArray();
-            }
-            byte[] res = new byte[4];
-            Array.Copy(tmp, 0, res, 0, 4);
-            return res;
-        }
-
-
-        /// <summary>
-        /// Выполняет дешифрование сообщения
-        /// </summary>
-        /// <param name="message">Зашифрованное сообщение (hex)</param>
-        /// <param name="key">256-битный ключ</param>
-        public static string Decrypt(string message, byte[] key)
-        {
-            string decryptMessage = "";
-            for (int i = 0; i < message.Length / 16; i++)
-            {
-                string part = message.Substring(i * 16, 16);
-                byte[] messageBytes = part.ToByteArray();
-                byte[][] K = GetIterationKeys(key);
-                byte[] decryptBytes = TransD(messageBytes, K);
-                decryptMessage += decryptBytes.ToHexString();
-            }
-            return decryptMessage.ToDecString();
-        }
     }
 }
 
+// Сложение двух чисел в кольце это то же самое, что и (a + b) % 2^степень кольца,
+// то есть (10 + 5) % 12 = 3 (где 12 это степень кольца)
+// В нашем случае сетпень кольца = 32.
