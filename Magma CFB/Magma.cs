@@ -1,14 +1,11 @@
-﻿using System;
-using System.Linq;
-using System.Numerics;
+﻿using System.Numerics;
 using System.Text;
 using ExtensionMethods;
-//using System.Text.Encoding.CodePages;
 
 namespace MagmaCFB
 {
     /// <summary>
-    /// Реализация ГОСТ Р 34.12-2015
+    /// Реализация ГОСТ Р 34.13-2015
     /// </summary>
     /// 
     static class Magma
@@ -29,194 +26,96 @@ namespace MagmaCFB
         private const int n = 8;
         private const int s = 8;
         private const int m = 2 * n;
-        public static byte[] CFBEncrypt(byte[] IV, byte[] message, byte[] key)
 
+
+        /// <summary>
+        /// Метод реализует ГОСТ 34.13-2015, режим гаммирования
+        /// с обратной связью по шифртексту (алгоритм Магма)
+        /// </summary>
+        /// <param name="IV">Вектор инициализации</param>
+        /// <param name="message">Весь открытый текст</param>
+        /// <param name="key">Ключ шифрования (мастер-ключ)</param>
+        /// <returns>Итоговый шифртекст</returns>
+        public static byte[] CFBEncrypt(byte[] IV, byte[] message, byte[] key)
         {
+            // Количество блоков открытого текста
             int blocksCount = message.Length % 8 == 0 ? message.Length / 8 : message.Length / 8 + 1;
-            int blockSize = 16;
 
             byte[] gammaMSB = new byte[n];
             byte[] gammaLSB = new byte[m-s];
+            // При первой итерации гамма = вектору инициализации
             byte[] R = IV;
             byte[] Ci = new byte[s];
             byte[] C = new byte[Ci.Length * blocksCount];
 
-            //byte[] resultCiphertext = new byte[blockSize];
-            string resultCiphertext = "";
-
             for (int i = 1; i < blocksCount + 1; i++)
             {
-
+                //1) Если это не первая итерация, то гамма = LSB || Сi
                 if (i != 1)
-                {
-                    R = gammaLSB.Concat(Ci).ToArray();
-                    //R = new byte[IV.Length]; gamma[(blockSize * (i - 1))..(blockSize * i)].CopyTo(gammaBlock, 0);
-                }
-                    
+                    R = gammaLSB.Concat(Ci).ToArray();  
 
-                //byte[] messageBlock = message[0..(16 * i)];
-                //byte[] gammaBlock = gamma[0..(16 * i)];
-
-                //byte[] messageBlock = message[0..(blockSize * i)];
-                //byte[] gammaBlock = gamma[0..(blockSize * i)];
-
-                // ОШИБКА где-то тут
-                //byte[] messageBlock = message[(blockSize*(i - 1))..(blockSize * i)]; - БЫЛО
                 byte[] messageBlock = message[(n * (i - 1))..(n * i)];
-
-                //byte[] gammaBlock = new byte[m];
-
-                //if (i == 1)
-                //    gamma[(blockSize * (i - 1))..(blockSize * i)].CopyTo(gammaBlock, 0);
-               // else
-
-
-                //for (int b = 0; b < gammaBlock.Length / 2; b++)
-                //{
-                //    Console.Write(gammaBlock[b].ToString());
-                //}
 
                 Console.WriteLine($"P{i}: {messageBlock.NewToHexString()}");
 
-                //Console.WriteLine($"GammaBlock:{gammaBlock.NewToHexString()}");
+                // 2) LSB - берём последние m-s символов от гаммы
+                R[(m - s)..R.Length].CopyTo(gammaLSB, 0);
+                //Console.WriteLine($"GammaLSB: {gammaLSB.NewToHexString()}");
 
-                // 2) LSB - берем последние registerLength символов от гаммы
-                //byte[] gammaLSB = gammaBlock[(m - s)..gammaBlock.Length]; !!!!!!!!!!!!!!!!!!!!!!!!!!!1
-                R[(m - s)..R.Length].CopyTo(gammaLSB, 0); // Меняем gammaLSB, тк теперь гамма другая
-                Console.WriteLine($"GammaLSB: {gammaLSB.NewToHexString()}");
-
-                // 3) MSB - берем первые n символов от гаммы
-                //byte[] gammaMSB = gammaBlock[0..n];
-                R[0..n].CopyTo(gammaMSB, 0); // Меняем gammaMSB, тк теперь гамма другая
+                // MSB - берем первые n символов от гаммы
+                R[0..n].CopyTo(gammaMSB, 0);
                 //Console.WriteLine($"GammaMSB:{gammaMSB.NewToHexString()}");
+
                 Console.WriteLine($"Входной блок: {gammaMSB.NewToHexString()}");
 
-                string encryptRes = MyEncrypt(gammaMSB.NewToHexString(), key);
+                // Вызываем метод базового алгоритма Магма (ek)
+                string encryptRes = Encrypt(gammaMSB.NewToHexString(), key);
+                //byte[] encryptRes = Encrypt(gammaMSB, key);
                 Console.WriteLine("Выходной блок: " + encryptRes);
+                //Console.WriteLine("Выходной блок: " + encryptRes.NewToHexString());
 
-                // 4) Усекаем выход функции Encrypt
                 byte[] usechenniyRes = Convert.FromHexString(encryptRes);
-                
 
+                // 4) Усекаем выход функции Encrypt (Ts)
                 if (encryptRes.Length % s != 0)
                     usechenniyRes = Convert.FromHexString(encryptRes[0..s]);
 
-                Console.WriteLine($"Усеченный результат шифрования: {usechenniyRes.NewToHexString()}");
+                //Console.WriteLine($"Усеченный результат шифрования: {usechenniyRes.NewToHexString()}");
 
-                // 5) XOR усеченного результата и открытого текста
-                //byte[] ciphertextblock = new byte[usechenniyRes.Length];
-
+                // 5) XOR усеченного результата и открытого текста (s XOR P1)
                 for (int j = 0; j < usechenniyRes.Length; j++)
                     Ci[j] = (byte)(usechenniyRes[j] ^ messageBlock[j]);
 
-                //resultCiphertext += gammaLSB.NewToHexString() + ciphertextblock.NewToHexString();
-
-                Console.WriteLine($"Кусок итогового шифртекста {i}" + $" итерация: {Ci.NewToHexString()}");
+                Console.WriteLine($"C{i}:" + $" {Ci.NewToHexString()}\n");
 
                 Ci.CopyTo(C, Ci.Length * (i-1));
-                // Вызываем эту функцию снова
             }
-
-            //Console.WriteLine($"Итоговый шифртекст: {resultCiphertext}");
-
-            //return resultCiphertext;
             return C;
         }
 
         /// <summary>
-        /// Генерирует случайный 256-битный ключ
+        /// Реализует базовый алгоритм Магма из ГОСТ 34.12-2015
         /// </summary>
-        public static byte[] GetKey()
+        /// <param name="message">открытый текст</param>
+        /// <param name="key">ключ шифрования</param>
+        /// <returns></returns>
+        
+        public static string Encrypt(string message, byte[] key)
+        //public static byte[] Encrypt(byte[] message, byte[] key)
         {
-            return PrimeNumber.GetPrimeNumber(256).ToByteArray();
-        }
-
-        public static string MyToHexString(this string input)
-        {
-            char[] values = input.ToCharArray();
-            string hex_string = "";
-
-            byte[] arr;
-
-            //string stroka = Convert.ToHexString(arr, 5, 6);
-
-            foreach (char letter in values)
-            {
-                // Get the integral value of the character.
-                int value = Convert.ToInt32(letter);
-                //hex_string += ()value.ToString();
-                // Convert the integer value to a hexadecimal value in string form.
-                Console.WriteLine($"Hexadecimal value of {letter} is {value:X}");
-                Console.WriteLine(hex_string);
-            }
-            return hex_string;
-        }
-
-        /// <summary>
-        /// Выполняет шифрование сообщения
-        /// </summary>
-        /// <param name="message">Сообщение</param>
-        /// <param name="key">256-битный ключ</param>
-        //public static string Encrypt(string message, byte[] key)
-        //{
-        //    string encryptMessage = "";
-        //    // Тут разбивают на блоки по 8 символов (а не по 16), тк каждый char символ в hex формате
-        //    // будет в 2 раза больше. Поэтому надо на вход этой функции подавать обычный открытый текст, а не 16ричный
-        //    int blockCount = message.Length % 8 == 0 ? message.Length / 8 : message.Length / 8 + 1;
-        //    for (int i = 0; i < blockCount; i++)
-        //    {
-        //        string part = message.PadRight(blockCount * 8).Substring(i * 8, 8).PadRight(8);
-        //        Console.WriteLine($"Part: {part}");
-        //        //string tmp = part.ToHexString();
-
-        //        string tmp = part.MyToHexString();
-
-        //        Console.WriteLine("Check: " + tmp);
-        //        byte[] messageBytes = part.ToHexString().ToByteArray();
-        //        byte[][] K = GetIterationKeys(key);
-        //        byte[] encryptBytes = TransE(messageBytes, K);
-        //        encryptMessage += encryptBytes.ToHexString();
-        //    }
-        //    return encryptMessage;
-        //}
-        public static string MyEncrypt(string message, byte[] key)
-        {
+            //byte[] encryptMessage = new byte[message.Length];
             string encryptMessage = "";
-            //int blockCount = message.Length % 8 == 0 ? message.Length / 8 : message.Length / 8 + 1;
-            //for (int i = 0; i < 1; i++)
-            //{
-            //string part = message.PadRight(blockCount * 8).Substring(i * 8, 8).PadRight(8);
-            //string tmp = part.ToHexString();
-            //Console.WriteLine("Check: " + tmp);
-            //string tmp = "fedcba9876543210";
 
-            //byte[] messageBytes = part.ToHexString().ToByteArray();
-            //byte[] messageBytes = tmp.ToByteArray();
             byte[] messageBytes = message.ToByteArray();
             byte[][] K = GetIterationKeys(key);
             byte[] encryptBytes = TransE(messageBytes, K);
+            //byte[] encryptBytes = TransE(message, K);
+
             encryptMessage += encryptBytes.ToHexString();
-            //}
+            //encryptBytes.CopyTo(encryptMessage, 0);
             return encryptMessage;
         }
-        /// <summary>
-        /// Выполняет дешифрование сообщения
-        /// </summary>
-        /// <param name="message">Зашифрованное сообщение (hex)</param>
-        /// <param name="key">256-битный ключ</param>
-        public static string Decrypt(string message, byte[] key)
-        {
-            string decryptMessage = "";
-            for (int i = 0; i < message.Length / 16; i++)
-            {
-                string part = message.Substring(i * 16, 16);
-                byte[] messageBytes = part.ToByteArray();
-                byte[][] K = GetIterationKeys(key);
-                byte[] decryptBytes = TransD(messageBytes, K);
-                decryptMessage += decryptBytes.ToHexString();
-            }
-            return decryptMessage.ToDecString();
-        }
+
 
         /// <summary>
         /// Выполняет выработку итерационных ключей
@@ -373,6 +272,26 @@ namespace MagmaCFB
             byte[] res = new byte[4];
             Array.Copy(tmp, 0, res, 0, 4);
             return res;
+        }
+
+
+        /// <summary>
+        /// Выполняет дешифрование сообщения
+        /// </summary>
+        /// <param name="message">Зашифрованное сообщение (hex)</param>
+        /// <param name="key">256-битный ключ</param>
+        public static string Decrypt(string message, byte[] key)
+        {
+            string decryptMessage = "";
+            for (int i = 0; i < message.Length / 16; i++)
+            {
+                string part = message.Substring(i * 16, 16);
+                byte[] messageBytes = part.ToByteArray();
+                byte[][] K = GetIterationKeys(key);
+                byte[] decryptBytes = TransD(messageBytes, K);
+                decryptMessage += decryptBytes.ToHexString();
+            }
+            return decryptMessage.ToDecString();
         }
     }
 }
