@@ -24,6 +24,71 @@ namespace Magma
             new byte[16] {1, 7, 14, 13, 0, 5, 8, 3, 4, 15, 10, 6, 9, 12, 11, 2}
         };
 
+        private const int n = 8;
+        private const int s = 8;
+        private const int m = 2 * n;
+
+        /// <summary>
+        /// Метод реализует зашифрование ГОСТ 34.13-2015, режим гаммирования
+        /// с обратной связью по шифртексту (алгоритм Магма)
+        /// </summary>
+        /// <param name="IV">Вектор инициализации</param>
+        /// <param name="message">Весь открытый текст</param>
+        /// <param name="key">Ключ шифрования (мастер-ключ)</param>
+        /// <returns>Итоговый шифртекст</returns>
+        public static byte[] CFBEncrypt(byte[] IV, byte[] message, byte[] key)
+        {
+            // Количество блоков открытого текста
+            int blocksCount = message.Length % 8 == 0 ? message.Length / 8 : message.Length / 8 + 1;
+
+            byte[] gammaMSB = new byte[n];
+            byte[] gammaLSB = new byte[m - s];
+            // При первой итерации гамма = вектору инициализации
+            byte[] R = IV;
+            byte[] Ci = new byte[s];
+            byte[] C = new byte[Ci.Length * blocksCount];
+
+            for (int i = 1; i < blocksCount + 1; i++)
+            {
+                //1) Если это не первая итерация, то гамма = LSB || Сi
+                if (i != 1)
+                    R = gammaLSB.Concat(Ci).ToArray();
+
+                byte[] messageBlock = message[(n * (i - 1))..(n * i)];
+
+                //byte[] messageBlock = message[(n * (i - 1))..(n * i - (message.Length % 8))];
+
+                Console.WriteLine($"P{i}: {messageBlock.ToHexString()}");
+
+                // 2) LSB - берём последние m-s символов от гаммы
+                R[(m - s)..R.Length].CopyTo(gammaLSB, 0);
+
+                // MSB - берем первые n символов от гаммы
+                R[0..n].CopyTo(gammaMSB, 0);
+
+                Console.WriteLine($"Входной блок: {gammaMSB.ToHexString()}");
+
+                // Вызываем метод базового алгоритма Магма (ek)
+                string encryptRes = Encrypt(gammaMSB.ToHexString(), key);
+                Console.WriteLine("Выходной блок: " + encryptRes);
+
+                byte[] usechenniyRes = Convert.FromHexString(encryptRes);
+
+                // 4) Усекаем выход функции Encrypt (Ts)
+                if (encryptRes.Length % s != 0)
+                    usechenniyRes = Convert.FromHexString(encryptRes[0..s]);
+
+                // 5) XOR усеченного результата и открытого текста (s XOR Pi)
+                for (int j = 0; j < usechenniyRes.Length; j++)
+                    Ci[j] = (byte)(usechenniyRes[j] ^ messageBlock[j]);
+
+                Console.WriteLine($"C{i}:" + $" {Ci.ToHexString()}\n");
+
+                Ci.CopyTo(C, Ci.Length * (i - 1));
+            }
+            return C;
+        }
+
         public static string Encrypt(string message, byte[] key)
         {
             string encryptMessage = "";
@@ -206,10 +271,6 @@ namespace Magma
         /// </summary>
         private static byte[] XOR(byte[] k, byte[] a)
         {
-            //byte[] result = new byte[4];
-            //for (int i = 0; i < 4; i++)
-            //    result[i] = (byte)(k[i] ^ a[i]);
-
             byte[] result = new byte[a.Length];
             for (int i = 0; i < a.Length; i++)
                 result[i] = (byte)(k[i] ^ a[i]);
@@ -217,47 +278,69 @@ namespace Magma
             return result;
         }
 
-        //                                         ------ Алгоритм расшифрования Магма -----
+
+        //                                 ------ Алгоритм расшифрования Magma CFB -----
+
 
 
         /// <summary>
-        /// Выполняет расшифрование сообщения
+        /// Метод реализует расшифрование ГОСТ 34.13-2015, режим гаммирования
+        /// с обратной связью по шифртексту (алгоритм Магма)
         /// </summary>
-        /// <param name="message"> строка в 16-ричной СС </param>
-        /// <param name="key"> 256-битный ключ </param>
-        public static string Decrypt(string message, byte[] key)
+        /// <param name="IV">Вектор инициализации</param>
+        /// <param name="message">Весь шифртекст</param>
+        /// <param name="key">Ключ шифрования (мастер-ключ)</param>
+        /// <returns>Итоговый открытый текст</returns>
+        // ВНИМАНИЕ! Алгоритм расшифрования в режиме CFB использует базовый алгоритм ЗАШИФРОВАНИЯ магма
+        public static byte[] CFBDecrypt(byte[] IV, byte[] encryptMessage, byte[] key)
         {
+            // Количество блоков открытого текста
+            int blocksCount = encryptMessage.Length % 8 == 0 ? encryptMessage.Length / 8 : encryptMessage.Length / 8 + 1;
 
-            string decryptMessage = "";
+            byte[] gammaMSB = new byte[n];
+            byte[] gammaLSB = new byte[m - s];
+            // При первой итерации гамма = вектору инициализации
+            byte[] R = IV;
+            byte[] Pi = new byte[s];
+            byte[] P = new byte[Pi.Length * blocksCount];
 
-            int blockCount = message.Length % 16 == 0 ? message.Length / 16 : message.Length / 16 + 1;
-            for (int i = 0; i < blockCount; i++)
+            for (int i = 1; i < blocksCount + 1; i++)
             {
-                string part = message.PadRight(blockCount * 16).Substring(i * 16, 16).Replace(" ", "");
-                byte[] messageBytes = part.ToByteArray();
-                byte[][] K = GetIterationKeys(key);
-                byte[] decryptBytes = D(messageBytes, K);
-                decryptMessage += decryptBytes.ToHexStringReverse();
+                //1) Если это не первая итерация, то гамма = LSB || Pi
+                if (i != 1)
+                    R = gammaLSB.Concat(Pi).ToArray();
+
+                byte[] messageBlock = encryptMessage[(n * (i - 1))..(n * i)];
+
+                Console.WriteLine($"C{i}: {messageBlock.ToHexString()}");
+
+                // 2) LSB - берём последние m-s символов от гаммы
+                R[(m - s)..R.Length].CopyTo(gammaLSB, 0);
+
+                // MSB - берем первые n символов от гаммы
+                R[0..n].CopyTo(gammaMSB, 0);
+
+                Console.WriteLine($"Входной блок: {gammaMSB.ToHexString()}");
+
+                // Вызываем метод базового алгоритма Магма (ek)
+                string encryptRes = Encrypt(gammaMSB.ToHexString(), key);
+                Console.WriteLine("Выходной блок: " + encryptRes);
+
+                byte[] usechenniyRes = Convert.FromHexString(encryptRes);
+
+                // 4) Усекаем выход функции Encrypt (Ts)
+                if (encryptRes.Length % s != 0)
+                    usechenniyRes = Convert.FromHexString(encryptRes[0..s]);
+
+                // 5) XOR усеченного результата и шифртекста (s XOR Ci)
+                for (int j = 0; j < usechenniyRes.Length; j++)
+                    Pi[j] = (byte)(usechenniyRes[j] ^ messageBlock[j]);
+
+                Console.WriteLine($"P{i}:" + $" {Pi.ToHexString()}\n");
+
+                Pi.CopyTo(P, Pi.Length * (i - 1));
             }
-            return decryptMessage;
+            return P;
         }
-
-
-        /// <summary>
-        /// Выполняет D-подстановку D = G*[K1]G[K2]...G[K32] (Преобразование, обратное E)
-        /// </summary>
-        /// <param name="message">Зашифрованное сообщение</param>
-        /// <param name="K">Последовательность итерационных ключей</param>
-        private static byte[] D(byte[] message, byte[][] K)
-        {
-            byte[] a1 = message.Skip(4).ToArray();
-            byte[] a0 = message.Take(4).ToArray();
-
-            for (int i = 31; i >= 0; i--)
-                // Используем итерационные ключи в обратном порядке
-                G(K[i], ref a1, ref a0);
-            return a1.Concat(a0).ToArray();
-        }
-
     }
 }
