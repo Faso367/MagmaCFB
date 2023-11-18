@@ -24,89 +24,25 @@ namespace Magma
             new byte[16] {1, 7, 14, 13, 0, 5, 8, 3, 4, 15, 10, 6, 9, 12, 11, 2}
         };
 
-        //public static string MyToHexString(this string input)
-        //{
-        //    char[] values = input.ToCharArray();
-        //    string hex_string = "";
-
-        //    byte[] arr;
-
-        //    //string stroka = Convert.ToHexString(arr, 5, 6);
-
-        //    foreach (char letter in values)
-        //    {
-        //        // Get the integral value of the character.
-        //        int value = Convert.ToInt32(letter);
-        //        //hex_string += ()value.ToString();
-        //        // Convert the integer value to a hexadecimal value in string form.
-        //        Console.WriteLine($"Hexadecimal value of {letter} is {value:X}");
-        //        Console.WriteLine(hex_string);
-        //    }
-        //    return hex_string;
-        //}
-
-        /// <summary>
-        /// Выполняет шифрование сообщения
-        /// </summary>
-        /// <param name="message">Сообщение</param>
-        /// <param name="key">256-битный ключ</param>
-        //public static string Encrypt(string message, byte[] key)
-        //{
-        //    string encryptMessage = "";
-        //    // Тут разбивают на блоки по 8 символов (а не по 16), тк каждый char символ в hex формате
-        //    // будет в 2 раза больше. Поэтому надо на вход этой функции подавать обычный открытый текст, а не 16ричный
-        //    int blockCount = message.Length % 8 == 0 ? message.Length / 8 : message.Length / 8 + 1;
-        //    for (int i = 0; i < blockCount; i++)
-        //    {
-        //        string part = message.PadRight(blockCount * 8).Substring(i * 8, 8).PadRight(8);
-        //        Console.WriteLine($"Part: {part}");
-        //        string tmp = part.MyToHexString();
-
-        //        //string tmp = part.ToHexStringReverse();
-
-        //        Console.WriteLine("Check: " + tmp);
-        //        byte[] messageBytes = part.ToHexString().ToByteArray();
-        //        byte[][] K = GetIterationKeys(key);
-        //        byte[] encryptBytes = E(messageBytes, K);
-        //        encryptMessage += encryptBytes.ToHexString();
-        //    }
-        //    return encryptMessage;
-        //}
-        //public static string MyEncrypt(string message, byte[] key)
-        //{
-        //    string encryptMessage = "";
-        //    //int blockCount = message.Length % 8 == 0 ? message.Length / 8 : message.Length / 8 + 1;
-        //    //for (int i = 0; i < 1; i++)
-        //    //{
-        //        //string part = message.PadRight(blockCount * 8).Substring(i * 8, 8).PadRight(8);
-        //        //string tmp = part.ToHexString();
-        //        //Console.WriteLine("Check: " + tmp);
-        //        //string tmp = "fedcba9876543210";
-
-        //        //byte[] messageBytes = part.ToHexString().ToByteArray();
-        //        //byte[] messageBytes = tmp.ToByteArray();
-        //        byte[] messageBytes = message.ToByteArray();
-        //        byte[][] K = GetIterationKeys(key);
-        //        byte[] encryptBytes = E(messageBytes, K);
-        //        encryptMessage += encryptBytes.ToHexString();
-        //    //}
-        //    return encryptMessage;
-        //}
-
         public static string Encrypt(string message, byte[] key)
         {
             string encryptMessage = "";
 
-            byte[] messageBytes = message.ToByteArray();
-            byte[][] K = GetIterationKeys(key);
+            int blockCount = message.Length % 16 == 0 ? message.Length / 16 : message.Length / 16 + 1;
+            for (int i = 0; i < blockCount; i++)
+            {
+                string part = message.PadRight(blockCount * 16).Substring(i * 16, 16).Replace(" ", "");
+                byte[] messageBytes = part.ToByteArray();
+                byte[][] K = GetIterationKeys(key);
 
-            //Console.WriteLine("Итерационные ключи: \n");
-            //foreach (var row in K)
-            //  Console.WriteLine(Convert.ToHexStringReverse(row).ToLower());
+                //Console.WriteLine("Итерационные ключи: \n");
+                //foreach (var row in K)
+                //  Console.WriteLine(Convert.ToHexStringReverse(row).ToLower());
 
-            byte[] encryptBytes = E(messageBytes, K);
+                byte[] encryptBytes = E(messageBytes, K);
 
-            encryptMessage += encryptBytes.ToHexStringReverse();
+                encryptMessage += encryptBytes.ToHexStringReverse();
+            }
             return encryptMessage;
         }
 
@@ -270,14 +206,19 @@ namespace Magma
         /// </summary>
         private static byte[] XOR(byte[] k, byte[] a)
         {
-            byte[] result = new byte[4];
-            for (int i = 0; i < 4; i++)
+            //byte[] result = new byte[4];
+            //for (int i = 0; i < 4; i++)
+            //    result[i] = (byte)(k[i] ^ a[i]);
+
+            byte[] result = new byte[a.Length];
+            for (int i = 0; i < a.Length; i++)
                 result[i] = (byte)(k[i] ^ a[i]);
 
             return result;
         }
 
         //                                         ------ Алгоритм расшифрования Магма -----
+
 
         /// <summary>
         /// Выполняет расшифрование сообщения
@@ -286,16 +227,21 @@ namespace Magma
         /// <param name="key"> 256-битный ключ </param>
         public static string Decrypt(string message, byte[] key)
         {
+
             string decryptMessage = "";
-            for (int i = 0; i < message.Length / 16; i++)
+
+            int blockCount = message.Length % 16 == 0 ? message.Length / 16 : message.Length / 16 + 1;
+            for (int i = 0; i < blockCount; i++)
             {
-                byte[] messageBytes = message.ToByteArray();
+                string part = message.PadRight(blockCount * 16).Substring(i * 16, 16).Replace(" ", "");
+                byte[] messageBytes = part.ToByteArray();
                 byte[][] K = GetIterationKeys(key);
                 byte[] decryptBytes = D(messageBytes, K);
                 decryptMessage += decryptBytes.ToHexStringReverse();
             }
             return decryptMessage;
         }
+
 
         /// <summary>
         /// Выполняет D-подстановку D = G*[K1]G[K2]...G[K32] (Преобразование, обратное E)
