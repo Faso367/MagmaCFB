@@ -16,15 +16,11 @@ namespace ExtensionMethods
         /// <param name="input">Входная строка</param>
         public static string ToHexStringReverse(this byte[] input)
         {
-            //ПОЧЕМУ РАБОТАЕТ ЗЕРКАЛЬНО (ТАК БЫЛО)
             return BitConverter.ToString(input.Reverse().ToArray()).Replace("-", "").ToLower();
-            //return BitConverter.ToString(input.ToArray()).Replace("-", "").ToLower();
         }
 
         public static string ToHexString(this byte[] input)
         {
-            //ПОЧЕМУ РАБОТАЕТ ЗЕРКАЛЬНО (ТАК БЫЛО)
-            //return BitConverter.ToString(input.Reverse().ToArray()).Replace("-", "").ToLower();
             return BitConverter.ToString(input.ToArray()).Replace("-", "").ToLower();
         }
 
