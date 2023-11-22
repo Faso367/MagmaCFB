@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Numerics;
 using System.Text;
@@ -7,7 +7,7 @@ using ExtensionMethods;
 namespace Magma
 {
     /// <summary>
-    /// Реализация ГОСТ Р 34.12-2015
+    /// Реализация ГОСТ Р 34.13-2015
     /// </summary>
     static class Magma
     {
@@ -40,23 +40,24 @@ namespace Magma
         {
             // Количество блоков открытого текста
             int blocksCount = message.Length % 8 == 0 ? message.Length / 8 : message.Length / 8 + 1;
+            int ostatok = message.Length % 8;
 
             byte[] gammaMSB = new byte[n];
             byte[] gammaLSB = new byte[m - s];
             // При первой итерации гамма = вектору инициализации
             byte[] R = IV;
-            byte[] Ci = new byte[s];
-            byte[] C = new byte[Ci.Length * blocksCount];
+            byte[] Ci = new byte[n];
+            byte[] C = new byte[message.Length];
 
             for (int i = 1; i < blocksCount + 1; i++)
             {
+
                 //1) Если это не первая итерация, то гамма = LSB || Сi
                 if (i != 1)
                     R = gammaLSB.Concat(Ci).ToArray();
 
-                byte[] messageBlock = message[(n * (i - 1))..(n * i)];
-
-                //byte[] messageBlock = message[(n * (i - 1))..(n * i - (message.Length % 8))];
+                // На случай если последний входной блок неполный (его длина не кратна 8)
+                byte[] messageBlock = (i == blocksCount) ? message[(n * (i - 1))..] : message[(n * (i - 1))..(n * i)];
 
                 Console.WriteLine($"P{i}: {messageBlock.ToHexString()}");
 
@@ -79,12 +80,20 @@ namespace Magma
                     usechenniyRes = Convert.FromHexString(encryptRes[0..s]);
 
                 // 5) XOR усеченного результата и открытого текста (s XOR Pi)
-                for (int j = 0; j < usechenniyRes.Length; j++)
+                for (int j = 0; j < messageBlock.Length; j++)
                     Ci[j] = (byte)(usechenniyRes[j] ^ messageBlock[j]);
 
-                Console.WriteLine($"C{i}:" + $" {Ci.ToHexString()}\n");
+                if (i == blocksCount && ostatok != 0) // Если последний блок неполный
+                {
+                    Ci[0..ostatok].CopyTo(C, Ci.Length * (i - 1));
+                    Console.WriteLine($"C{i}:" + $" {Ci[0..ostatok].ToHexString()}\n");
+                }
 
-                Ci.CopyTo(C, Ci.Length * (i - 1));
+                else
+                {
+                    Ci.CopyTo(C, Ci.Length * (i - 1));
+                    Console.WriteLine($"P{i}:" + $" {Ci.ToHexString()}\n");
+                }
             }
             return C;
         }
@@ -294,33 +303,37 @@ namespace Magma
         // ВНИМАНИЕ! Алгоритм расшифрования в режиме CFB использует базовый алгоритм ЗАШИФРОВАНИЯ магма
         public static byte[] CFBDecrypt(byte[] IV, byte[] encryptMessage, byte[] key)
         {
+            Console.WriteLine("\n       ----------------   Расшифрование   -----------------");
             // Количество блоков открытого текста
             int blocksCount = encryptMessage.Length % 8 == 0 ? encryptMessage.Length / 8 : encryptMessage.Length / 8 + 1;
+            int ostatok = encryptMessage.Length % 8;
 
             byte[] gammaMSB = new byte[n];
             byte[] gammaLSB = new byte[m - s];
             // При первой итерации гамма = вектору инициализации
             byte[] R = IV;
-            byte[] Pi = new byte[s];
-            byte[] P = new byte[Pi.Length * blocksCount];
+            byte[] Pi = new byte[n];
+            byte[] P = new byte[encryptMessage.Length];
+            byte[] Ci = new byte[n];
 
             for (int i = 1; i < blocksCount + 1; i++)
             {
-                //1) Если это не первая итерация, то гамма = LSB || Pi
+                //1) Если это не первая итерация, то гамма = LSB || Сi
                 if (i != 1)
-                    R = gammaLSB.Concat(Pi).ToArray();
+                    R = gammaLSB.Concat(Ci).ToArray();
 
-                byte[] messageBlock = encryptMessage[(n * (i - 1))..(n * i)];
-
-                Console.WriteLine($"C{i}: {messageBlock.ToHexString()}");
+                Ci = (i == blocksCount) ? encryptMessage[(n * (i - 1))..] : encryptMessage[(n * (i - 1))..(n * i)];
+                Console.WriteLine($"C{i}: {Ci.ToHexString()}");
 
                 // 2) LSB - берём последние m-s символов от гаммы
                 R[(m - s)..R.Length].CopyTo(gammaLSB, 0);
 
+                Console.WriteLine("Входной блок: " + gammaLSB.ToHexString());
+
                 // MSB - берем первые n символов от гаммы
                 R[0..n].CopyTo(gammaMSB, 0);
 
-                Console.WriteLine($"Входной блок: {gammaMSB.ToHexString()}");
+                //Console.WriteLine($"Входной блок(MSB): {gammaMSB.ToHexString()}");
 
                 // Вызываем метод базового алгоритма Магма (ek)
                 string encryptRes = Encrypt(gammaMSB.ToHexString(), key);
@@ -332,13 +345,22 @@ namespace Magma
                 if (encryptRes.Length % s != 0)
                     usechenniyRes = Convert.FromHexString(encryptRes[0..s]);
 
-                // 5) XOR усеченного результата и шифртекста (s XOR Ci)
-                for (int j = 0; j < usechenniyRes.Length; j++)
-                    Pi[j] = (byte)(usechenniyRes[j] ^ messageBlock[j]);
+                // 5) XOR шифртекста и усеченного результата (Ci XOR s)
+                for (int j = 0; j < Ci.Length; j++)
+                    Pi[j] = (byte)(Ci[j] ^ usechenniyRes[j]);
 
-                Console.WriteLine($"P{i}:" + $" {Pi.ToHexString()}\n");
+                if (i == blocksCount && ostatok != 0) // Если последний блок неполный
+                {
+                    Pi[0..ostatok].CopyTo(P, Pi.Length * (i - 1));
+                    Console.WriteLine($"P{i}:" + $" {Pi[0..ostatok].ToHexString()}\n");
+                }
 
-                Pi.CopyTo(P, Pi.Length * (i - 1));
+                else
+                {
+                    Pi.CopyTo(P, Pi.Length * (i - 1));
+                    Console.WriteLine($"P{i}:" + $" {Pi.ToHexString()}\n");
+                }
+
             }
             return P;
         }
