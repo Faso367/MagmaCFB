@@ -5,13 +5,13 @@ using System.Text;
 namespace ExtensionMethods
 {
     /// <summary>
-    /// Дополнительные методы для каста
+    /// Дополнительные методы для работы с массивами и hex-строками
     /// </summary>
     public static class ConvertExtensions
     {
 
         /// <summary>
-        /// Выполняется преобразование массива байт в hex строку
+        /// Выполняется преобразование массива байт в hex строку с переворотом
         /// </summary>
         /// <param name="input">Входная строка</param>
         public static string ToHexStringReverse(this byte[] input)
@@ -19,6 +19,10 @@ namespace ExtensionMethods
             return BitConverter.ToString(input.Reverse().ToArray()).Replace("-", "").ToLower();
         }
 
+        /// <summary>
+        /// Выполняется преобразование массива байт в hex строку
+        /// </summary>
+        /// <param name="input">Входная строка</param>
         public static string ToHexString(this byte[] input)
         {
             return BitConverter.ToString(input.ToArray()).Replace("-", "").ToLower();
@@ -32,9 +36,8 @@ namespace ExtensionMethods
         {
             byte[] bytes = new byte[input.Length / 2];
             for (int i = 0; i < bytes.Length; i++)
-            {
                 bytes[i] = Convert.ToByte(input.Substring((bytes.Length - i - 1) * 2, 2), 16);
-            }
+
             return bytes;
         }
 
@@ -61,9 +64,8 @@ namespace ExtensionMethods
         {
             byte[] res = new byte[4];
             for (int i = 0; i < 4; i++)
-            {
                 res[i] = (byte)(arr[2 * i + 1] * 16 + arr[2 * i]);
-            }
+
             return res;
         }
     }
