@@ -49,6 +49,8 @@ namespace Magma
             byte[] Ci = new byte[n];
             byte[] C = new byte[message.Length];
 
+            byte[][] K = GetIterationKeys(key);
+
             for (int i = 1; i < blocksCount + 1; i++)
             {
 
@@ -70,14 +72,14 @@ namespace Magma
                 Console.WriteLine($"Входной блок: {gammaMSB.ToHexString()}");
 
                 // Вызываем метод базового алгоритма Магма (ek)
-                string encryptRes = Encrypt(gammaMSB.ToHexString(), key);
-                Console.WriteLine("Выходной блок: " + encryptRes);
+                byte[] encryptBytes = E(gammaMSB.Reverse().ToArray(), K).Reverse().ToArray();
 
-                byte[] usechenniyRes = Convert.FromHexString(encryptRes);
+                Console.WriteLine("Выходной блок: " + encryptBytes.ToHexString());
+                byte[] usechenniyRes = encryptBytes;
 
                 // 4) Усекаем выход функции Encrypt (Ts)
-                if (encryptRes.Length % s != 0)
-                    usechenniyRes = Convert.FromHexString(encryptRes[0..s]);
+                if (encryptBytes.Length % s != 0)
+                    usechenniyRes = encryptBytes[0..s];
 
                 // 5) XOR усеченного результата и открытого текста (s XOR Pi)
                 for (int j = 0; j < messageBlock.Length; j++)
@@ -92,34 +94,11 @@ namespace Magma
                 else
                 {
                     Ci.CopyTo(C, Ci.Length * (i - 1));
-                    Console.WriteLine($"P{i}:" + $" {Ci.ToHexString()}\n");
+                    Console.WriteLine($"C{i}:" + $" {Ci.ToHexString()}\n");
                 }
             }
             return C;
         }
-
-        public static string Encrypt(string message, byte[] key)
-        {
-            string encryptMessage = "";
-
-            int blockCount = message.Length % 16 == 0 ? message.Length / 16 : message.Length / 16 + 1;
-            for (int i = 0; i < blockCount; i++)
-            {
-                string part = message.PadRight(blockCount * 16).Substring(i * 16, 16).Replace(" ", "");
-                byte[] messageBytes = part.ToByteArray();
-                byte[][] K = GetIterationKeys(key);
-
-                //Console.WriteLine("Итерационные ключи: \n");
-                //foreach (var row in K)
-                //  Console.WriteLine(Convert.ToHexStringReverse(row).ToLower());
-
-                byte[] encryptBytes = E(messageBytes, K);
-
-                encryptMessage += encryptBytes.ToHexStringReverse();
-            }
-            return encryptMessage;
-        }
-
 
         /// <summary>
         /// Выполняет выработку итерационных ключей
@@ -316,6 +295,8 @@ namespace Magma
             byte[] P = new byte[encryptMessage.Length];
             byte[] Ci = new byte[n];
 
+            byte[][] K = GetIterationKeys(key);
+
             for (int i = 1; i < blocksCount + 1; i++)
             {
                 //1) Если это не первая итерация, то гамма = LSB || Сi
@@ -336,14 +317,14 @@ namespace Magma
                 //Console.WriteLine($"Входной блок(MSB): {gammaMSB.ToHexString()}");
 
                 // Вызываем метод базового алгоритма Магма (ek)
-                string encryptRes = Encrypt(gammaMSB.ToHexString(), key);
-                Console.WriteLine("Выходной блок: " + encryptRes);
+                byte[] encryptBytes = E(gammaMSB.Reverse().ToArray(), K).Reverse().ToArray();
 
-                byte[] usechenniyRes = Convert.FromHexString(encryptRes);
+                Console.WriteLine("Выходной блок: " + encryptBytes.ToHexString());
+                byte[] usechenniyRes = encryptBytes;
 
                 // 4) Усекаем выход функции Encrypt (Ts)
-                if (encryptRes.Length % s != 0)
-                    usechenniyRes = Convert.FromHexString(encryptRes[0..s]);
+                if (encryptBytes.Length % s != 0)
+                    usechenniyRes = encryptBytes[0..s];
 
                 // 5) XOR шифртекста и усеченного результата (Ci XOR s)
                 for (int j = 0; j < Ci.Length; j++)
